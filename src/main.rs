@@ -53,7 +53,7 @@ fn main() -> std::io::Result<()> {
 
   let path = matches.value_of("file").unwrap_or("package.json");
 
-  let mut file = OpenOptions::new().read(true).write(true).open(&path)?;
+  let mut file = OpenOptions::new().read(true).write(true).open(path)?;
 
   let mut reader = BufReader::new(&file);
 
@@ -116,7 +116,7 @@ fn main() -> std::io::Result<()> {
 
     let relative_path = Path::new(&path);
 
-    add_and_commit(&repo, &relative_path, &version).expect("Couldn't add file to repo");
+    add_and_commit(&repo, relative_path, &version).expect("Couldn't add file to repo");
   } else {
     println!("Update aborted");
   }
@@ -151,7 +151,7 @@ fn add_and_commit(repo: &Repository, path: &Path, version: &str) -> Result<Oid, 
   let oid = index.write_tree()?;
   let message = format!("build: {}", version);
   let signature = Signature::now("alin", "danalin06@gmail.com")?;
-  let parent_commit = find_last_commit(&repo)?;
+  let parent_commit = find_last_commit(repo)?;
   let tree = repo.find_tree(oid)?;
 
   match repo.commit(
