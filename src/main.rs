@@ -1,100 +1,136 @@
-use serde_json::Value;
-use std::env;
+use clap::{App, Arg};
+use git2::{Commit, ObjectType, Oid, Repository, Signature};
+use std::collections::HashMap;
 use std::fs::OpenOptions;
-use std::io::Read;
 use std::io::{BufRead, BufReader, Seek, SeekFrom, Write};
+use std::path::Path;
 
 fn main() -> std::io::Result<()> {
-    // Open the JSON file for reading and writing
-    let mut file = OpenOptions::new()
-        .read(true)
-        .write(true)
-        .open("package.json")?;
+    let mut line = String::new();
+    let mut current_position = 0;
+    let mut old_version = String::new();
+
+    let mut splitting_char_map: HashMap<String, char> = HashMap::new();
+    //TODO Handle config for different extension in the map
+    // for example key, quotes, etc..
+    // {
+    //    key: "version"
+    //    splitting_char: '='
+    //
+    // }
+    splitting_char_map.insert(String::from("package.json"), ':');
+    splitting_char_map.insert(String::from("cargo.toml"), '=');
+
+    let matches = App::new("pvb")
+        .arg(
+            Arg::with_name("major")
+                .short('m')
+                .long("major")
+                .help("Increment the major version"),
+        )
+        .arg(
+            Arg::with_name("minor")
+                .short('n')
+                .long("minor")
+                .help("Increment the minor version"),
+        )
+        .arg(
+            Arg::with_name("patch")
+                .short('p')
+                .long("patch")
+                .help("Increment the patch version"),
+        )
+        // .arg(
+        //     Arg::with_name("file")
+        //         .short('f')
+        //         .long("file")
+        //         .value_name("FILE_PATH")
+        //         .help("Path to the file to open")
+        //         .takes_value(true)
+        //         .required(true),
+        // )
+        .get_matches();
+
+    let path = matches.value_of("file").unwrap_or("package.json");
+
+    let mut file = OpenOptions::new().read(true).write(true).open(&path)?;
+
     let mut reader = BufReader::new(&file);
 
-    // Parse the JSON content into a serde_json::Value object
-    let mut json_content = String::new();
-    reader.read_to_string(&mut json_content)?;
-    let package: Value = serde_json::from_str(&json_content)?;
+    while reader.read_line(&mut line)? > 0 {
+        if line.trim_start().to_lowercase().contains("version") {
+            let splitting_char = match splitting_char_map.get(path) {
+                Some(character) => *character,
+                None => ':',
+            };
 
-    // Retrieve command-line arguments
-    let args: Vec<String> = env::args().collect();
+            let parts: Vec<&str> = line.split(splitting_char).collect();
+            println!(" splitting {} line {}", splitting_char, line);
 
-    // Extract the version from the JSON object
-    let mut new_version = match package.get("version") {
-        Some(version) => version.as_str().unwrap_or("0.0.1").to_string(),
-        None => {
-            println!("'version' field not found in package.json.");
-            return Ok(());
-        }
-    };
-
-    // Determine which part of the version to update based on CLI arguments
-    if args.len() > 1 {
-        let version_part = &args[1]; // Assuming the first argument specifies which part to update
-
-        match version_part.as_str() {
-            "major" => {
-                // Update major version
-                // Logic to increment major version
-                new_version = increment_major_version(&new_version); // Implement your logic here
-                println!("new version {}", new_version);
-            }
-            "minor" => {
-                // Update minor version
-                // Logic to increment minor version
-                new_version = increment_minor_version(&new_version); // Implement your logic here
-            }
-            "patch" => {
-                // Update patch version
-                // Logic to increment patch version
-                new_version = increment_patch_version(&new_version); // Implement your logic here
-            }
-            _ => {
-                println!("Invalid version part specified. Usage: ./program_name major|minor|patch");
+            if parts.len() >= 2 {
+                old_version = parts[1]
+                    .trim()
+                    .chars()
+                    .filter(|c| !(*c == '"' || *c == '\n' || *c == ','))
+                    .collect::<String>();
+                break;
+            } else {
+                println!("Invalid format for version line in package.json");
                 return Ok(());
             }
         }
-    }
-    // Find the position of the line containing the "version" key
-    let mut line = String::new();
-    let mut current_position = 0;
-    let mut version_line_position = None;
-    while reader.read_line(&mut line)? > 0 {
-        println!("{}", line);
-        if line.trim().starts_with(r#""version""#) {
-            // Record the position of the line containing the version
-            version_line_position = Some(current_position);
-            break;
-        }
-        current_position += line.len() as u64;
+        current_position += line.len() + 1;
         line.clear();
     }
 
-    // If "version" line found, update it
-    if let Some(position) = version_line_position {
-        // Seek to the position of the "version" line
-        file.seek(SeekFrom::Start(position))?;
+    let version = match (
+        matches.is_present("major"),
+        matches.is_present("minor"),
+        matches.is_present("patch"),
+    ) {
+        (true, _, _) => increment_major_version(&old_version),
+        (_, true, _) => increment_minor_version(&old_version),
+        (_, _, true) => increment_patch_version(&old_version),
+        _ => {
+            println!("No version increment option specified.");
+            return Ok(());
+        }
+    };
+    println!("Current version is: {}", old_version);
+    println!("Update the version to: {}? [y/N]", version);
+    let test = String::from("test");
 
-        // Write the new version value
-        file.write_all(format!("\"version\": \"{}\"", new_version).as_bytes())?;
+    println!("{}", test);
+    let mut confirmation = String::new();
+    std::io::stdin().read_line(&mut confirmation)?;
+
+    if confirmation.trim().to_lowercase() == "y" {
+        // Seek to the version line position and overwrite the entire line
+        file.seek(SeekFrom::Start(current_position as u64))?;
+        let updated_line = format!("\"version\": \"{}\"", version);
+        file.write_all(updated_line.as_bytes())?;
+        println!("Version updated successfully!");
+
+        let repo_root = ".";
+        let repo = Repository::open(repo_root).expect("Couldn't open repository");
+
+        let relative_path = Path::new(&path);
+
+        add_and_commit(&repo, &relative_path, &version).expect("Couldn't add file to repo");
     } else {
-        println!("No line containing \"version\" found in the file.");
+        println!("Update aborted");
     }
 
     Ok(())
 }
 
 fn increment_major_version(current_version: &str) -> String {
-    // Logic to increment major version
-    // Example: Splitting version string and incrementing major version
     let parts: Vec<&str> = current_version.split('.').collect();
     let major: u64 = parts[0].parse().unwrap_or(0);
     format!("{}.{}.{}", major + 1, 0, 0)
 }
 
 fn increment_minor_version(current_version: &str) -> String {
-    // Logic to increment minor version
     let parts: Vec<&str> = current_version.split('.').collect();
     let major: u64 = parts[0].parse().unwrap_or(0);
     let minor: u64 = parts[1].parse().unwrap_or(0);
@@ -102,11 +138,40 @@ fn increment_minor_version(current_version: &str) -> String {
 }
 
 fn increment_patch_version(current_version: &str) -> String {
-    // Logic to increment patch version
-    // Example: Splitting version string and incrementing patch version
     let parts: Vec<&str> = current_version.split('.').collect();
     let major: u64 = parts[0].parse().unwrap_or(0);
     let minor: u64 = parts[1].parse().unwrap_or(0);
     let patch: u64 = parts[2].parse().unwrap_or(0);
     format!("{}.{}.{}", major, minor, patch + 1)
+}
+
+fn add_and_commit(repo: &Repository, path: &Path, version: &str) -> Result<Oid, git2::Error> {
+    let mut index = repo.index()?;
+    index.add_path(path)?;
+    let oid = index.write_tree()?;
+    let message = format!("build: {}", version);
+    let signature = Signature::now("alin", "danalin06@gmail.com")?;
+    let parent_commit = find_last_commit(&repo)?;
+    let tree = repo.find_tree(oid)?;
+
+    match repo.commit(
+        Some("HEAD"), // point HEAD to our new commit
+        &signature,
+        &signature,
+        &message,
+        &tree,
+        &[&parent_commit],
+    ) {
+        Ok(commit_id) => {
+            index.write()?;
+            Ok(commit_id)
+        }
+        Err(err) => Err(err),
+    }
+}
+
+fn find_last_commit(repo: &Repository) -> Result<Commit, git2::Error> {
+    let obj = repo.head()?.resolve()?.peel(ObjectType::Commit)?;
+    obj.into_commit()
+        .map_err(|_| git2::Error::from_str("Couldn't find commit"))
 }
