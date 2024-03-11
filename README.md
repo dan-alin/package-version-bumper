@@ -18,24 +18,13 @@ cargo install pvb # TODO
 
 ### Node
 
-With [NPM](https://github.com/npm/cli)
-```shell
-npm install pvb
-```
+You can install `pvb` with you favorite package manager
 
-With [Yarn](https://github.com/yarnpkg/berry)
 ```shell
-yarn add pvb
-```
-
-With [PNPM](https://github.com/pnpm/pnpm)
-```shell
-pnpm add pvb
-```
-
-With [Bun](https://github.com/oven-sh/bun)
-```shell
-bun add pvb
+npm install --save-dev pvb
+yarn add -D pvb
+pnpm add -D pvb
+bun add -D pvb
 ```
 
 ## Usage
@@ -45,7 +34,8 @@ pvb [OPTIONS]
 ```
 
 ### Options:
-- `-m`, `--major`: Increment the major version number. 
+
+- `-m`, `--major`: Increment the major version number.
 - `-n`, `--minor`: Increment the minor version number.
 - `-p`, `--patch`: Increment the patch version number.
 
