@@ -1,25 +1,22 @@
+use std::path::Path;
+
 use clap::{App, Arg};
 use git2::{Commit, ObjectType, Oid, Repository, Signature};
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
-use std::fs::{self};
-use std::path::Path;
 
+mod packages;
 mod version;
+
+use packages::PackageUtils;
 
 #[derive(Debug, Serialize, Deserialize)]
 struct Package {
   version: version::Version,
   #[serde(flatten)]
-  other: HashMap<String, serde_json::Value>,
+  others: serde_json::Value,
 }
 
-fn main() -> serde_json::Result<()> {
-  let data = fs::read_to_string("package.json").expect("Unable to read file");
-
-  let mut package_json: Package =
-    serde_json::from_str(&data).expect("Package json should contain a version field.");
-
+fn main() -> anyhow::Result<()> {
   let matches = App::new("pvb")
     .arg(
       Arg::with_name("major")
@@ -39,32 +36,36 @@ fn main() -> serde_json::Result<()> {
         .long("patch")
         .help("Increment the patch version"),
     )
-    // .arg(
-    //     Arg::with_name("file")
-    //         .short('f')
-    //         .long("file")
-    //         .value_name("FILE_PATH")
-    //         .help("Path to the file to open")
-    //         .takes_value(true)
-    //         .required(true),
-    // )
+    .arg(
+      Arg::with_name("verbose")
+        .short('v')
+        .long("verbose")
+        .help("Prints debug information"),
+    )
     .get_matches();
+
+  if matches.is_present("verbose") {
+    env_logger::init();
+    log::info!("Starting pvb");
+  }
+
+  let mut package: Box<dyn PackageUtils> = packages::get_package();
 
   match (
     matches.is_present("major"),
     matches.is_present("minor"),
     matches.is_present("patch"),
   ) {
-    (true, _, _) => package_json.version.increment_major(),
-    (_, true, _) => package_json.version.increment_minor(),
-    (_, _, true) => package_json.version.increment_patch(),
+    (true, _, _) => package.increment_major()?,
+    (_, true, _) => package.increment_minor()?,
+    (_, _, true) => package.increment_patch()?,
     _ => {
       println!("No version increment option specified.");
       return Ok(());
     }
   };
 
-  let version = package_json.version.to_string();
+  let version = package.get_version().to_string();
 
   println!("Update the version to: {}? [y/N]", version);
 
@@ -74,14 +75,12 @@ fn main() -> serde_json::Result<()> {
     .expect("Cannot read input.");
 
   if confirmation.trim().to_lowercase() == "y" {
-    let value = serde_json::to_string_pretty(&package_json)?;
-
-    fs::write("package.json", value).expect("Unable to write file");
+    package.write_package()?;
 
     let repo_root = ".";
     let repo = Repository::open(repo_root).expect("Couldn't open repository");
 
-    let relative_path = Path::new("package.json");
+    let relative_path = Path::new(package.get_location());
 
     add_and_commit(&repo, relative_path, &version).expect("Couldn't add file to repo");
   } else {

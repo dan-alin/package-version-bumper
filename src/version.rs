@@ -80,3 +80,64 @@ impl Version {
     self.patch += 1;
   }
 }
+
+#[cfg(test)]
+mod test {
+  use super::*;
+
+  #[test]
+  fn test_version_from_str() {
+    let version = Version::from_str("1.2.3");
+    assert_eq!(version.major, 1);
+    assert_eq!(version.minor, 2);
+    assert_eq!(version.patch, 3);
+  }
+
+  #[test]
+  fn test_version_increment_major() {
+    let mut version = Version::from_str("1.2.3");
+    version.increment_major();
+    assert_eq!(version.major, 2);
+    assert_eq!(version.minor, 0);
+    assert_eq!(version.patch, 0);
+  }
+
+  #[test]
+  fn test_version_increment_minor() {
+    let mut version = Version::from_str("1.2.3");
+    version.increment_minor();
+    assert_eq!(version.major, 1);
+    assert_eq!(version.minor, 3);
+    assert_eq!(version.patch, 0);
+  }
+
+  #[test]
+  fn test_version_increment_patch() {
+    let mut version = Version::from_str("1.2.3");
+    version.increment_patch();
+    assert_eq!(version.major, 1);
+    assert_eq!(version.minor, 2);
+    assert_eq!(version.patch, 4);
+  }
+
+  #[test]
+  fn test_version_serialize() {
+    let version = Version::from_str("1.2.3");
+    let serialized = serde_json::to_string(&version).unwrap();
+    assert_eq!(serialized, "\"1.2.3\"");
+  }
+
+  #[test]
+  fn test_version_deserialize() {
+    let version: Version = serde_json::from_str("\"1.2.3\"").unwrap();
+    assert_eq!(version.major, 1);
+    assert_eq!(version.minor, 2);
+    assert_eq!(version.patch, 3);
+  }
+
+  #[test]
+  fn test_version_display() {
+    let version = Version::from_str("1.2.3");
+    assert_eq!(format!("{}", version), "1.2.3");
+  }
+}
