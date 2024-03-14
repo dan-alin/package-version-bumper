@@ -4,9 +4,9 @@ use clap::{App, Arg};
 use git2::Repository;
 use serde::{Deserialize, Serialize};
 
+mod gitops;
 mod packages;
 mod version;
-mod versioning;
 
 use packages::PackageUtils;
 
@@ -45,7 +45,6 @@ fn main() -> anyhow::Result<()> {
     )
     .arg(
       Arg::with_name("tag")
-        .short('t')
         .long("no-tag")
         .help("skip tag the commit with the new version"),
     )
@@ -90,16 +89,7 @@ fn main() -> anyhow::Result<()> {
     let relative_path = Path::new(package.get_location());
     let should_tag = !matches.is_present("tag");
 
-    match versioning::add_and_commit(&repo, relative_path, &version) {
-      Ok(oid) => {
-        if should_tag {
-          versioning::tag_commit(&version, &repo, &oid)?;
-        };
-      }
-      Err(err) => {
-        println!("Failed to commit: {}", err);
-      }
-    }
+    gitops::add_and_commit(&repo, relative_path, &version, should_tag).expect("Couldn't commit");
   } else {
     println!("Update aborted");
   }
