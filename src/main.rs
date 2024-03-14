@@ -89,8 +89,17 @@ fn main() -> anyhow::Result<()> {
 
     let relative_path = Path::new(package.get_location());
     let should_tag = !matches.is_present("tag");
-    versioning::add_and_commit(&repo, relative_path, &version, should_tag)
-      .expect("Couldn't add file to repo");
+
+    match versioning::add_and_commit(&repo, relative_path, &version) {
+      Ok(oid) => {
+        if should_tag {
+          versioning::tag_commit(&version, &repo, &oid)?;
+        };
+      }
+      Err(err) => {
+        println!("Failed to commit: {}", err);
+      }
+    }
   } else {
     println!("Update aborted");
   }
