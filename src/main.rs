@@ -45,8 +45,9 @@ fn main() -> anyhow::Result<()> {
     )
     .arg(
       Arg::with_name("tag")
-        .long("no-tag")
-        .help("skip tag the commit with the new version"),
+        .short('t')
+        .long("tag")
+        .help("Tag the commit with the new version"),
     )
     .get_matches();
 
@@ -87,7 +88,7 @@ fn main() -> anyhow::Result<()> {
     let repo = Repository::open(repo_root).expect("Couldn't open repository");
 
     let relative_path = Path::new(package.get_location());
-    let should_tag = !matches.is_present("tag");
+    let should_tag = matches.is_present("tag");
 
     gitops::add_and_commit(&repo, relative_path, &version, should_tag).expect("Couldn't commit");
   } else {
