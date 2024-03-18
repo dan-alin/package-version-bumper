@@ -1,9 +1,10 @@
 use std::path::Path;
 
 use clap::{App, Arg};
-use git2::{Commit, ObjectType, Oid, Repository, Signature};
+use git2::Repository;
 use serde::{Deserialize, Serialize};
 
+mod gitops;
 mod packages;
 mod version;
 
@@ -41,6 +42,12 @@ fn main() -> anyhow::Result<()> {
         .short('v')
         .long("verbose")
         .help("Prints debug information"),
+    )
+    .arg(
+      Arg::with_name("tag")
+        .short('t')
+        .long("tag")
+        .help("Tag the commit with the new version"),
     )
     .get_matches();
 
@@ -81,43 +88,12 @@ fn main() -> anyhow::Result<()> {
     let repo = Repository::open(repo_root).expect("Couldn't open repository");
 
     let relative_path = Path::new(package.get_location());
+    let should_tag = matches.is_present("tag");
 
-    add_and_commit(&repo, relative_path, &version).expect("Couldn't add file to repo");
+    gitops::add_and_commit(&repo, relative_path, &version, should_tag).expect("Couldn't commit");
   } else {
     println!("Update aborted");
   }
 
   Ok(())
-}
-
-fn add_and_commit(repo: &Repository, path: &Path, version: &str) -> Result<Oid, git2::Error> {
-  let mut index = repo.index()?;
-  index.add_path(path)?;
-  let oid = index.write_tree()?;
-  let message = format!("build: {}", version);
-  let signature = Signature::now("alin", "danalin06@gmail.com")?;
-  let parent_commit = find_last_commit(repo)?;
-  let tree = repo.find_tree(oid)?;
-
-  match repo.commit(
-    Some("HEAD"), // point HEAD to our new commit
-    &signature,
-    &signature,
-    &message,
-    &tree,
-    &[&parent_commit],
-  ) {
-    Ok(commit_id) => {
-      index.write()?;
-      Ok(commit_id)
-    }
-    Err(err) => Err(err),
-  }
-}
-
-fn find_last_commit(repo: &Repository) -> Result<Commit, git2::Error> {
-  let obj = repo.head()?.resolve()?.peel(ObjectType::Commit)?;
-  obj
-    .into_commit()
-    .map_err(|_| git2::Error::from_str("Couldn't find commit"))
 }
