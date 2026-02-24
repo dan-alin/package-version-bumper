@@ -23,7 +23,7 @@ pub trait PackageUtils {
   fn increment_patch(&mut self) -> Result<()>;
 }
 
-pub fn get_package() -> Box<(dyn PackageUtils + 'static)> {
+pub fn get_package() -> Box<dyn PackageUtils + 'static> {
   let package_json = Path::new("package.json").exists();
   let cargo_toml = Path::new("Cargo.toml").exists();
 
@@ -44,10 +44,10 @@ pub fn get_package() -> Box<(dyn PackageUtils + 'static)> {
     let package_json =
       serde_json::from_str(&data).expect("Package json should contain a version field.");
 
-    return Box::new(PackageJson {
+    Box::new(PackageJson {
       package_path: "package.json".to_owned(),
       ..package_json
-    });
+    })
   } else {
     panic!("No package file found")
   }

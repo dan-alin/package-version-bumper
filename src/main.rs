@@ -2,7 +2,7 @@ use std::path::Path;
 
 use clap::{App, Arg};
 use git2::Repository;
-use serde::{Deserialize, Serialize};
+// use serde::{Deserialize, Serialize};
 
 mod gitops;
 mod packages;
@@ -10,15 +10,15 @@ mod version;
 
 use packages::PackageUtils;
 
-#[derive(Debug, Serialize, Deserialize)]
-struct Package {
-  version: version::Version,
-  #[serde(flatten)]
-  others: serde_json::Value,
-}
-
+// #[derive(Debug, Serialize, Deserialize)]
+// struct Package {
+//   version: version::Version,
+//   #[serde(flatten)]
+//   others: serde_json::Value,
+// }
+//
 fn main() -> anyhow::Result<()> {
-  let matches = App::new("pvb")
+  let matches = App::new("vup")
     .arg(
       Arg::with_name("major")
         .short('m')

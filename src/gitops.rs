@@ -1,7 +1,7 @@
 use git2::{Commit, ObjectType, Oid, Repository};
 use std::path::Path;
 
-fn find_last_commit(repo: &Repository) -> Result<Commit, git2::Error> {
+fn find_last_commit(repo: &Repository) -> Result<Commit<'_>, git2::Error> {
   let obj = repo.head()?.resolve()?.peel(ObjectType::Commit)?;
   obj
     .into_commit()
@@ -17,12 +17,12 @@ pub fn add_and_commit(
   let mut index = repo.index()?;
   index.add_path(path)?;
   let oid = index.write_tree()?;
-  let message = format!("build: {}", version);
+  let message = format!("chore(version): {}", version);
   let parent_commit = find_last_commit(repo)?;
   let tree = repo.find_tree(oid)?;
 
   match repo.commit(
-    Some("HEAD"), // point HEAD to our new commit
+    Some("HEAD"),
     &repo.signature()?,
     &repo.signature()?,
     &message,
