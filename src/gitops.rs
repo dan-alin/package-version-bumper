@@ -14,6 +14,7 @@ pub fn add_and_commit(
   path: &Path,
   version: &str,
   should_tag: bool,
+  should_push: bool,
 ) -> Result<Oid, git2::Error> {
   let mut index = repo.index()?;
   index.add_path(path)?;
@@ -31,23 +32,50 @@ pub fn add_and_commit(
     &[&parent_commit],
   ) {
     Ok(commit_id) => {
+      let mut tag_name = None;
       if should_tag {
-        let tag_name = format!("v{}", version);
+        let name = format!("v{}", version);
         let tag_message = format!("Release v{}", version);
         let status = Command::new("git")
           .arg("tag")
           .arg("-s")
-          .arg(&tag_name)
+          .arg(&name)
           .arg("-m")
           .arg(&tag_message)
           .arg(commit_id.to_string())
           .status();
 
         match status {
-          Ok(s) if s.success() => {}
+          Ok(s) if s.success() => {
+            tag_name = Some(name);
+          }
           _ => return Err(git2::Error::from_str("Failed to create signed tag")),
         }
       };
+
+      if should_push {
+        // Push the current branch
+        let status = Command::new("git").arg("push").status();
+
+        match status {
+          Ok(s) if s.success() => {}
+          _ => return Err(git2::Error::from_str("Failed to push commit")),
+        }
+
+        // Push the tag if it was created
+        if let Some(name) = tag_name {
+          let status = Command::new("git")
+            .arg("push")
+            .arg("origin")
+            .arg(&name)
+            .status();
+
+          match status {
+            Ok(s) if s.success() => {}
+            _ => return Err(git2::Error::from_str("Failed to push tag")),
+          }
+        }
+      }
 
       index.write()?;
       Ok(commit_id)

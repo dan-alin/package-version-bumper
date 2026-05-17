@@ -49,6 +49,12 @@ fn main() -> anyhow::Result<()> {
         .long("tag")
         .help("Tag the commit with the new version"),
     )
+    .arg(
+      Arg::with_name("push")
+        .short('u')
+        .long("push")
+        .help("Push the commit and the tag to the remote"),
+    )
     .get_matches();
 
   if matches.is_present("verbose") {
@@ -89,8 +95,10 @@ fn main() -> anyhow::Result<()> {
 
     let relative_path = Path::new(package.get_location());
     let should_tag = matches.is_present("tag");
+    let should_push = matches.is_present("push");
 
-    gitops::add_and_commit(&repo, relative_path, &version, should_tag).expect("Couldn't commit");
+    gitops::add_and_commit(&repo, relative_path, &version, should_tag, should_push)
+      .expect("Couldn't commit");
   } else {
     println!("Update aborted");
   }
