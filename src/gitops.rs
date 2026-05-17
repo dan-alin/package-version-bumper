@@ -32,7 +32,7 @@ pub fn add_and_commit(
     Ok(commit_id) => {
       if should_tag {
         repo.tag(
-          version,
+          &format!("v{}", version),
           &repo.find_object(commit_id, None)?,
           &repo.signature()?,
           &message,
