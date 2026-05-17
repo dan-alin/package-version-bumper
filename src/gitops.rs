@@ -1,5 +1,6 @@
 use git2::{Commit, ObjectType, Oid, Repository};
 use std::path::Path;
+use std::process::Command;
 
 fn find_last_commit(repo: &Repository) -> Result<Commit<'_>, git2::Error> {
   let obj = repo.head()?.resolve()?.peel(ObjectType::Commit)?;
@@ -17,7 +18,7 @@ pub fn add_and_commit(
   let mut index = repo.index()?;
   index.add_path(path)?;
   let oid = index.write_tree()?;
-  let message = format!("chore(version): {}", version);
+  let commit_message = format!("chore(version): {}", version);
   let parent_commit = find_last_commit(repo)?;
   let tree = repo.find_tree(oid)?;
 
@@ -25,19 +26,27 @@ pub fn add_and_commit(
     Some("HEAD"),
     &repo.signature()?,
     &repo.signature()?,
-    &message,
+    &commit_message,
     &tree,
     &[&parent_commit],
   ) {
     Ok(commit_id) => {
       if should_tag {
-        repo.tag(
-          &format!("v{}", version),
-          &repo.find_object(commit_id, None)?,
-          &repo.signature()?,
-          &message,
-          false,
-        )?;
+        let tag_name = format!("v{}", version);
+        let tag_message = format!("Release v{}", version);
+        let status = Command::new("git")
+          .arg("tag")
+          .arg("-s")
+          .arg(&tag_name)
+          .arg("-m")
+          .arg(&tag_message)
+          .arg(commit_id.to_string())
+          .status();
+
+        match status {
+          Ok(s) if s.success() => {}
+          _ => return Err(git2::Error::from_str("Failed to create signed tag")),
+        }
       };
 
       index.write()?;
