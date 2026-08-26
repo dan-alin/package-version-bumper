@@ -23,14 +23,31 @@ pub trait PackageUtils {
   fn increment_patch(&mut self) -> Result<()>;
 }
 
-pub fn get_package() -> Box<dyn PackageUtils + 'static> {
+pub fn get_package(config: &crate::config::Config) -> Box<dyn PackageUtils + 'static> {
+  if let Some(explicit_path) = &config.package {
+    let path = Path::new(explicit_path);
+    let data = fs::read_to_string(path).expect("Unable to read file");
+    let file_name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
+    if file_name == "Cargo.toml" {
+      let cargo_toml: CargoToml =
+        toml::from_str(&data).expect("Cargo.toml should contain a version field.");
+      return Box::new(CargoToml {
+        package_path: explicit_path.clone(),
+        ..cargo_toml
+      });
+    } else {
+      let package_json: PackageJson =
+        serde_json::from_str(&data).expect("package.json should contain a version field.");
+      return Box::new(PackageJson {
+        package_path: explicit_path.clone(),
+        ..package_json
+      });
+    }
+  }
+
   let package_json = Path::new("package.json").exists();
   let cargo_toml = Path::new("Cargo.toml").exists();
 
-  // if package_json && cargo_toml {
-  //   #[allow(unreachable_code, clippy::diverging_sub_expression)]
-  //   return unimplemented!("Both package.json and Cargo.toml found. This is not supported yet.");
-  // } else
   if cargo_toml {
     let data = fs::read_to_string("Cargo.toml").expect("Unable to read file");
     let cargo_toml = toml::from_str(&data).expect("Cargo.toml should contain a version field.");
@@ -56,8 +73,10 @@ pub fn get_package() -> Box<dyn PackageUtils + 'static> {
 #[cfg(test)]
 mod tests {
   use super::*;
+  use crate::config::Config;
   use std::env;
   use std::fs;
+  use tempfile::tempdir;
 
   #[test]
   fn cargo_package_location_is_correctly_cased() {
@@ -71,10 +90,25 @@ mod tests {
     .unwrap();
 
     env::set_current_dir(&temp_dir).unwrap();
-    let package = get_package();
+    let package = get_package(&Config::default());
     let location = package.get_location().clone();
     env::set_current_dir(original_dir).unwrap();
 
     assert_eq!(location, "Cargo.toml");
+  }
+
+  #[test]
+  fn explicit_package_path_overrides_auto_detect() {
+    let dir = tempdir().unwrap();
+    let cargo_path = dir.path().join("Cargo.toml");
+    fs::write(&cargo_path, "[package]\nversion = \"0.1.0\"\n").unwrap();
+
+    let config = Config {
+      package: Some(cargo_path.to_str().unwrap().to_owned()),
+      ..Config::default()
+    };
+
+    let package = get_package(&config);
+    assert_eq!(package.get_location(), cargo_path.to_str().unwrap());
   }
 }

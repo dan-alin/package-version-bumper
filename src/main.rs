@@ -4,6 +4,7 @@ use clap::{App, Arg};
 use git2::Repository;
 // use serde::{Deserialize, Serialize};
 
+mod config;
 mod gitops;
 mod packages;
 mod version;
@@ -62,7 +63,8 @@ fn main() -> anyhow::Result<()> {
     log::info!("Starting pvb");
   }
 
-  let mut package: Box<dyn PackageUtils> = packages::get_package();
+  let config = config::Config::load()?;
+  let mut package: Box<dyn PackageUtils> = packages::get_package(&config);
 
   match (
     matches.is_present("major"),
@@ -97,8 +99,19 @@ fn main() -> anyhow::Result<()> {
     let should_tag = matches.is_present("tag");
     let should_push = matches.is_present("push");
 
-    gitops::add_and_commit(&repo, relative_path, &version, should_tag, should_push)
-      .expect("Couldn't commit");
+    gitops::add_and_commit(
+      &repo,
+      relative_path,
+      &version,
+      should_tag,
+      should_push,
+      &gitops::GitOptions {
+        tag_prefix: &config.tag_prefix,
+        commit_prefix: &config.commit_prefix,
+        remote: &config.push_remote,
+      },
+    )
+    .expect("Couldn't commit");
   } else {
     println!("Update aborted");
   }
