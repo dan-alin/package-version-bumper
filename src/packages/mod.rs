@@ -36,7 +36,7 @@ pub fn get_package() -> Box<dyn PackageUtils + 'static> {
     let cargo_toml = toml::from_str(&data).expect("Cargo.toml should contain a version field.");
 
     Box::new(CargoToml {
-      package_path: "cargo.toml".to_owned(),
+      package_path: "Cargo.toml".to_owned(),
       ..cargo_toml
     })
   } else if package_json {
@@ -50,5 +50,31 @@ pub fn get_package() -> Box<dyn PackageUtils + 'static> {
     })
   } else {
     panic!("No package file found")
+  }
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+  use std::env;
+  use std::fs;
+
+  #[test]
+  fn cargo_package_location_is_correctly_cased() {
+    let original_dir = env::current_dir().unwrap();
+    let temp_dir = env::temp_dir().join("vup_test_cargo_casing");
+    fs::create_dir_all(&temp_dir).unwrap();
+    fs::write(
+      temp_dir.join("Cargo.toml"),
+      "[package]\nversion = \"0.1.0\"\n",
+    )
+    .unwrap();
+
+    env::set_current_dir(&temp_dir).unwrap();
+    let package = get_package();
+    let location = package.get_location().clone();
+    env::set_current_dir(original_dir).unwrap();
+
+    assert_eq!(location, "Cargo.toml");
   }
 }
