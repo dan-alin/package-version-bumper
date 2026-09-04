@@ -18,7 +18,7 @@ fn find_last_commit(repo: &Repository) -> Result<Commit<'_>, git2::Error> {
 
 pub fn add_and_commit(
   repo: &Repository,
-  path: &Path,
+  paths: &[&Path],
   version: &str,
   should_tag: bool,
   should_push: bool,
@@ -29,7 +29,9 @@ pub fn add_and_commit(
     .ok_or_else(|| git2::Error::from_str("bare repositories are not supported"))?;
 
   let mut index = repo.index()?;
-  index.add_path(path)?;
+  for path in paths {
+    index.add_path(path)?;
+  }
   let oid = index.write_tree()?;
   let commit_message = format!("{}{}", options.commit_prefix, version);
   let parent_commit = find_last_commit(repo)?;
@@ -144,7 +146,7 @@ mod tests {
 
     add_and_commit(
       &repo,
-      Path::new("version.txt"),
+      &[Path::new("version.txt")],
       "1.2.4",
       false,
       false,
@@ -161,6 +163,41 @@ mod tests {
     assert_eq!(head.message().unwrap(), "release: 1.2.4");
   }
 
+  #[test]
+  fn commit_stages_multiple_paths() {
+    let dir = tempdir().unwrap();
+    let repo = init_repo_with_commit(dir.path());
+
+    fs::write(dir.path().join("version.txt"), "2.0.0").unwrap();
+    fs::create_dir_all(dir.path().join("release-notes")).unwrap();
+    fs::write(dir.path().join("release-notes/2.0.0.md"), "## v2.0.0\n").unwrap();
+
+    add_and_commit(
+      &repo,
+      &[
+        Path::new("version.txt"),
+        Path::new("release-notes/2.0.0.md"),
+      ],
+      "2.0.0",
+      false,
+      false,
+      &GitOptions {
+        tag_prefix: "v",
+        commit_prefix: "chore(version): ",
+        remote: "origin",
+        no_sign: false,
+      },
+    )
+    .unwrap();
+
+    let head = repo.head().unwrap().peel_to_commit().unwrap();
+    let tree = head.tree().unwrap();
+    assert!(tree.get_path(std::path::Path::new("version.txt")).is_ok());
+    assert!(tree
+      .get_path(std::path::Path::new("release-notes/2.0.0.md"))
+      .is_ok());
+  }
+
   // Tag creation uses a `git tag -s` subprocess that runs in the process CWD,
   // not the temp repo, and requires GPG signing to be configured. Run manually
   // with `cargo test -- --include-ignored` on a machine with GPG set up.
@@ -174,7 +211,7 @@ mod tests {
 
     let result = add_and_commit(
       &repo,
-      Path::new("version.txt"),
+      &[Path::new("version.txt")],
       "1.2.4",
       true,
       false,
@@ -202,7 +239,7 @@ mod tests {
 
     let result = add_and_commit(
       &repo,
-      Path::new("version.txt"),
+      &[Path::new("version.txt")],
       "2.0.0",
       true,
       false,

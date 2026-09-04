@@ -1,0 +1,13 @@
+# Tag prefix prepended to the version number when creating git tags.
+# Set to "" for bare version tags like "1.2.3" instead of "v1.2.3".
+tag_prefix = "v"
+
+# Prefix for the version-bump commit message.
+commit_prefix = "chore(version): "
+
+# Explicit path to the package file (Cargo.toml or package.json).
+# If unset, vup auto-detects from the current working directory.
+# package = "packages/api/Cargo.toml"
+
+# Git remote to push commits and tags to.
+push_remote = "origin"

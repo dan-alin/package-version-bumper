@@ -156,6 +156,25 @@ pub fn generate_changelog(version: &str, date: &str, commits: &[CommitInfo]) -> 
   render_sections(&header, sections)
 }
 
+pub fn write_release_notes(dir: &std::path::Path, version: &str, content: &str) -> Result<()> {
+  std::fs::create_dir_all(dir)?;
+  let file_path = dir.join(format!("{}.md", version));
+  std::fs::write(file_path, content).map_err(Into::into)
+}
+
+pub fn generate_for_version(
+  version: &str,
+  date: &str,
+  commits: &[CommitInfo],
+  config: &crate::config::ReleaseNotesConfig,
+) -> Result<String> {
+  if config.patterns.is_empty() {
+    Ok(generate_changelog(version, date, commits))
+  } else {
+    generate_structured(version, date, commits, &config.patterns)
+  }
+}
+
 pub fn generate_structured(
   version: &str,
   date: &str,
@@ -546,5 +565,84 @@ mod tests {
     assert!(result.is_err());
     let msg = result.unwrap_err().to_string();
     assert!(msg.contains("[invalid"));
+  }
+
+  // --- generate_for_version ---
+
+  use crate::config::ReleaseNotesConfig;
+
+  #[test]
+  fn generate_for_version_no_patterns_uses_changelog() {
+    let commits = vec![ci("feat: something")];
+    let config = ReleaseNotesConfig { patterns: vec![] };
+    let out = generate_for_version("1.0.0", "2026-09-04", &commits, &config).unwrap();
+    assert!(out.contains("### Features"));
+    assert!(out.contains("- something"));
+  }
+
+  #[test]
+  fn generate_for_version_with_patterns_uses_structured() {
+    let commits = vec![ci("feat: add thing #US-1")];
+    let config = ReleaseNotesConfig {
+      patterns: vec![PatternConfig {
+        regex: r"#US-\d+".to_string(),
+        section: "User Stories".to_string(),
+        template: None,
+      }],
+    };
+    let out = generate_for_version("1.0.0", "2026-09-04", &commits, &config).unwrap();
+    assert!(out.contains("### User Stories"));
+    assert!(out.contains("- #US-1"));
+    assert!(!out.contains("add thing"));
+  }
+
+  #[test]
+  fn generate_for_version_invalid_pattern_returns_error() {
+    let config = ReleaseNotesConfig {
+      patterns: vec![PatternConfig {
+        regex: r"[invalid".to_string(),
+        section: "Bad".to_string(),
+        template: None,
+      }],
+    };
+    assert!(generate_for_version("1.0.0", "2026-09-04", &[], &config).is_err());
+  }
+
+  // --- write_release_notes ---
+
+  #[test]
+  fn write_creates_directory_and_file() {
+    let dir = tempdir().unwrap();
+    let output_dir = dir.path().join("release-notes");
+    write_release_notes(&output_dir, "1.2.3", "## v1.2.3\n").unwrap();
+    assert!(output_dir.join("1.2.3.md").exists());
+  }
+
+  #[test]
+  fn write_file_content_matches() {
+    let dir = tempdir().unwrap();
+    let output_dir = dir.path().join("release-notes");
+    let content = "## v2.0.0 — 2026-09-04\n\n### Features\n- something\n";
+    write_release_notes(&output_dir, "2.0.0", content).unwrap();
+    let read_back = fs::read_to_string(output_dir.join("2.0.0.md")).unwrap();
+    assert_eq!(read_back, content);
+  }
+
+  #[test]
+  fn write_overwrites_existing_file() {
+    let dir = tempdir().unwrap();
+    let output_dir = dir.path().join("release-notes");
+    write_release_notes(&output_dir, "1.0.0", "old content\n").unwrap();
+    write_release_notes(&output_dir, "1.0.0", "new content\n").unwrap();
+    let read_back = fs::read_to_string(output_dir.join("1.0.0.md")).unwrap();
+    assert_eq!(read_back, "new content\n");
+  }
+
+  #[test]
+  fn write_creates_nested_directories() {
+    let dir = tempdir().unwrap();
+    let output_dir = dir.path().join("a").join("b").join("release-notes");
+    write_release_notes(&output_dir, "0.1.0", "content\n").unwrap();
+    assert!(output_dir.join("0.1.0.md").exists());
   }
 }

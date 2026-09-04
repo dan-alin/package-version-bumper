@@ -161,7 +161,21 @@ impl Config {
        {package_line}\n\
        \n\
        # Git remote to push commits and tags to.\n\
-       push_remote = \"{push_remote}\"\n",
+       push_remote = \"{push_remote}\"\n\
+       \n\
+       # Release notes patterns (used by `vup release-notes structured` and `vup --release-notes`).\n\
+       # Each pattern matches against commit subjects and bodies using a regex.\n\
+       # When patterns are present, `--release-notes` uses structured mode;\n\
+       # with no patterns it falls back to changelog mode.\n\
+       #\n\
+       # [[release_notes.patterns]]\n\
+       # regex = \"#US-\\\\d+\"\n\
+       # section = \"User Stories\"\n\
+       #\n\
+       # [[release_notes.patterns]]\n\
+       # regex = \"#BUG-(\\\\d+)\"\n\
+       # section = \"Bug Fixes\"\n\
+       # template = \"#$1\"   # optional: transform the match; $0 = full match, $1 = first group\n",
       tag_prefix = self.tag_prefix,
       commit_prefix = self.commit_prefix,
       package_line = package_line,

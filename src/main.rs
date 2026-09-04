@@ -11,13 +11,15 @@ mod version;
 
 use packages::PackageUtils;
 
+const RELEASE_NOTES_DIR: &str = "release-notes";
+
 fn today_iso() -> String {
   chrono::Local::now().format("%Y-%m-%d").to_string()
 }
 
 fn main() -> anyhow::Result<()> {
   let release_notes_subcommand = App::new("release-notes")
-    .about("Generate release notes from git history")
+    .about("Generate release notes from git history and print to stdout")
     .subcommand(
       App::new("changelog")
         .about("List all commits since the last release grouped by type")
@@ -95,6 +97,21 @@ fn main() -> anyhow::Result<()> {
         .long("no-sign")
         .help("Create an annotated tag instead of a GPG-signed tag"),
     )
+    .arg(
+      Arg::with_name("release-notes")
+        .short('r')
+        .long("release-notes")
+        .help("Generate release notes and commit them alongside the version bump"),
+    )
+    .arg(
+      Arg::with_name("from")
+        .long("from")
+        .takes_value(true)
+        .requires("release-notes")
+        .help(
+          "Start release notes from this git ref (tag, SHA, or branch); implies --release-notes",
+        ),
+    )
     .get_matches();
 
   if let Some(init_matches) = matches.subcommand_matches("init") {
@@ -150,9 +167,16 @@ fn main() -> anyhow::Result<()> {
       return Ok(());
     }
 
-    // No sub-subcommand given — show help
     println!("Usage: vup release-notes <changelog|structured> [--from <ref>]");
     return Ok(());
+  }
+
+  let wants_release_notes = matches.is_present("release-notes");
+  let has_bump =
+    matches.is_present("major") || matches.is_present("minor") || matches.is_present("patch");
+
+  if wants_release_notes && !has_bump {
+    anyhow::bail!("--release-notes requires a version bump flag (--major, --minor, or --patch)");
   }
 
   if matches.is_present("verbose") {
@@ -193,17 +217,30 @@ fn main() -> anyhow::Result<()> {
   if confirmed {
     package.write_package()?;
 
-    let repo_root = ".";
-    let repo = Repository::open(repo_root).expect("Couldn't open repository");
-
-    let relative_path = Path::new(package.get_location());
+    let repo = Repository::open(".").expect("Couldn't open repository");
+    let package_path = Path::new(package.get_location());
     let should_tag = matches.is_present("tag");
     let should_push = matches.is_present("push");
     let no_sign = matches.is_present("no-sign");
 
+    let notes_path_str;
+    let mut paths_to_commit: Vec<&Path> = vec![package_path];
+
+    if wants_release_notes {
+      let date = today_iso();
+      let from = matches.value_of("from");
+      let commits = release_notes::collect_commits(&repo, from)?;
+      let notes =
+        release_notes::generate_for_version(&version, &date, &commits, &config.release_notes)?;
+      release_notes::write_release_notes(Path::new(RELEASE_NOTES_DIR), &version, &notes)?;
+      notes_path_str = format!("{}/{}.md", RELEASE_NOTES_DIR, version);
+      paths_to_commit.push(Path::new(&notes_path_str));
+      println!("Release notes written to {}", notes_path_str);
+    }
+
     gitops::add_and_commit(
       &repo,
-      relative_path,
+      &paths_to_commit,
       &version,
       should_tag,
       should_push,
