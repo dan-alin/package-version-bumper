@@ -42,6 +42,7 @@ fn main() -> anyhow::Result<()> {
     );
 
   let matches = App::new("vup")
+    .version(env!("CARGO_PKG_VERSION"))
     .subcommand(
       App::new("init").about("Create a vup.toml config file").arg(
         Arg::with_name("yes")
@@ -167,8 +168,8 @@ fn main() -> anyhow::Result<()> {
       return Ok(());
     }
 
-    println!("Usage: vup release-notes <changelog|structured> [--from <ref>]");
-    return Ok(());
+    eprintln!("Usage: vup release-notes <changelog|structured> [--from <ref>]");
+    anyhow::bail!("no subcommand specified for release-notes");
   }
 
   let wants_release_notes = matches.is_present("release-notes");

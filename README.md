@@ -158,6 +158,12 @@ vup release-notes structured
 vup release-notes structured > release-notes.md
 ```
 
+**Pipe changelog into an Azure DevOps wiki API call:**
+
+```shell
+vup release-notes changelog | az devops wiki page create ...
+```
+
 **Generate structured notes from a specific ref:**
 
 ```shell
@@ -179,6 +185,23 @@ section = "Bug Fixes"
 ```
 
 A commit matching multiple patterns appears under each matching section. Unmatched commits are silently omitted. Running `structured` with no patterns configured produces only the header.
+
+### Using release-notes in CI
+
+`vup release-notes` traverses the full git history to find the previous tag. CI checkout steps default to shallow clones, which will cause `vup` to fail with a clear error. Configure your checkout step to fetch the full history:
+
+**GitHub Actions:**
+```yaml
+- uses: actions/checkout@v4
+  with:
+    fetch-depth: 0
+```
+
+**Azure Pipelines:**
+```yaml
+- checkout: self
+  fetchDepth: 0
+```
 
 ## Known limitations
 

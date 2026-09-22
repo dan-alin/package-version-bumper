@@ -12,6 +12,19 @@ pub struct CommitInfo {
 }
 
 pub fn collect_commits(repo: &Repository, from_ref: Option<&str>) -> Result<Vec<CommitInfo>> {
+  let shallow_file = repo.path().join("shallow");
+  if shallow_file.exists()
+    && shallow_file
+      .metadata()
+      .map(|m| m.len() > 0)
+      .unwrap_or(false)
+  {
+    anyhow::bail!(
+      "repo is a shallow clone — git history is incomplete\n\
+       Set fetch-depth: 0 (GitHub Actions) or fetchDepth: 0 (Azure Pipelines) in your checkout step"
+    );
+  }
+
   let head_commit = repo
     .head()
     .map_err(|e| anyhow!("cannot read HEAD: {}", e))?
@@ -79,11 +92,17 @@ fn find_last_tag_commit(repo: &Repository) -> Option<git2::Oid> {
   }
 
   let head = repo.head().ok()?.peel_to_commit().ok()?;
+  let head_id = head.id();
   let mut revwalk = repo.revwalk().ok()?;
-  revwalk.push(head.id()).ok()?;
+  revwalk.push(head_id).ok()?;
 
   for oid_result in revwalk {
     let oid = oid_result.ok()?;
+    // Skip HEAD itself — if the pipeline is triggered by a tag push, HEAD is
+    // the newly-tagged commit and we want the tag before it.
+    if oid == head_id {
+      continue;
+    }
     if tagged_oids.contains(&oid) {
       return Some(oid);
     }
@@ -305,6 +324,22 @@ mod tests {
     let commits = collect_commits(&repo, None).unwrap();
     assert_eq!(commits.len(), 2);
     assert_eq!(commits[0].subject, "fix: a bug");
+    assert_eq!(commits[1].subject, "feat: new feature");
+  }
+
+  #[test]
+  fn head_is_tagged_returns_commits_since_prev_tag() {
+    let dir = tempdir().unwrap();
+    let repo = init_repo(dir.path());
+    add_commit(&repo, "chore(version): 1.0.0", "v1");
+    add_lightweight_tag(&repo, "v1.0.0");
+    add_commit(&repo, "feat: new feature", "a");
+    add_commit(&repo, "chore(version): 1.1.0", "v2");
+    add_lightweight_tag(&repo, "v1.1.0");
+
+    let commits = collect_commits(&repo, None).unwrap();
+    assert_eq!(commits.len(), 2);
+    assert_eq!(commits[0].subject, "chore(version): 1.1.0");
     assert_eq!(commits[1].subject, "feat: new feature");
   }
 
